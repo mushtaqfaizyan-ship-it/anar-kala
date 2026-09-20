@@ -1,0 +1,12 @@
+{
+  "name": "انار کالا",
+  "short_name": "انار کالا",
+  "description": "بازار آنلاین چندفروشندگی انار کالا",
+  "start_url": "/anar-kala/",
+  "scope": "/anar-kala/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b91c1c",
+  "lang": "fa",
+  "dir": "rtl"
+}
