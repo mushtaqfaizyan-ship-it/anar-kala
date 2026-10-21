@@ -5172,9 +5172,194 @@ async function updateStore(storeId) {
 }
 
 
+
 /* =====================================================
    افزودن محصول
+   پشتیبانی از ارقام فارسی، عربی و انگلیسی
+   انتخاب افغانی یا دالر
 ===================================================== */
+
+async function addProduct(storeId) {
+
+  const user = getCurrentUser();
+
+  if (!user || user.type !== "seller") {
+    alert("دسترسی غیرمجاز.");
+    return;
+  }
+
+  try {
+
+    const store = await getStoreById(storeId);
+
+    if (
+      !store ||
+      String(store.ownerId) !== String(user.id)
+    ) {
+      alert("شما مالک این فروشگاه نیستید.");
+      return;
+    }
+
+    const name =
+      document.getElementById("productName")
+        .value.trim();
+
+    const priceInput =
+      document.getElementById("productPrice");
+
+    const price =
+      normalizeDigits(priceInput.value)
+        .replace(/[٬،,]/g, "")
+        .replace(/٫/g, ".")
+        .trim();
+
+    const currencyInput =
+      document.getElementById("productCurrency");
+
+    const currency =
+      currencyInput
+        ? currencyInput.value
+        : "AFN";
+
+    const whatsapp =
+      document.getElementById("productWhatsapp")
+        .value.trim();
+
+    const description =
+      document.getElementById("productDescription")
+        .value.trim();
+
+    const imageInput =
+      document.getElementById("productImage");
+
+    if (!name || !price) {
+      alert("نام و قیمت محصول را وارد کنید.");
+      return;
+    }
+
+    const numericPrice = Number(price);
+
+    if (
+      !Number.isFinite(numericPrice) ||
+      numericPrice <= 0
+    ) {
+      alert("قیمت محصول باید عددی بزرگ‌تر از صفر باشد.");
+      return;
+    }
+
+    if (!["AFN", "USD"].includes(currency)) {
+      alert("واحد پول انتخاب‌شده معتبر نیست.");
+      return;
+    }
+
+    const image = await uploadFileToStorage(
+      imageInput,
+      "product-images"
+    );
+
+    await supabaseRequest("products", {
+      method: "POST",
+      body: {
+        name: name,
+        price: numericPrice,
+        currency: currency,
+        description: description,
+        whatsapp: whatsapp,
+        image_url: image,
+        store_id: Number(storeId),
+        owner_id: Number(user.id)
+      }
+    });
+
+    alert("محصول با موفقیت اضافه شد.");
+
+    await renderSellerPanel();
+
+  } catch (error) {
+
+    console.error("ADD PRODUCT ERROR:", error);
+
+    alert(
+      "خطای افزودن محصول:\n\n" +
+      error.message
+    );
+  }
+}
+
+
+/* =====================================================
+   نمایش محصولات فروشنده
+===================================================== */
+
+function renderSellerProducts(products) {
+
+  const container =
+    document.getElementById("sellerProducts");
+
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = "";
+
+  if (!products || products.length === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        هنوز محصولی اضافه نکرده‌اید.
+      </div>
+    `;
+    return;
+  }
+
+  products.forEach(product => {
+
+    const row = document.createElement("div");
+    row.className = "itemRow";
+
+    const currency =
+      product.currency === "USD"
+        ? "دالر آمریکا"
+        : "افغانی";
+
+    const imageHTML = product.image
+      ? `
+        <img
+          src="${escapeHTML(product.image)}"
+          class="previewImage"
+          alt="محصول">
+      `
+      : "";
+
+    row.innerHTML = `
+      ${imageHTML}
+
+      <h4>${escapeHTML(product.name || "")}</h4>
+
+      <p>
+        قیمت:
+        ${escapeHTML(String(product.price ?? ""))}
+        ${currency}
+      </p>
+
+      <p>
+        ${escapeHTML(product.description || "")}
+      </p>
+
+      <button
+        class="deleteBtn"
+        type="button">
+        حذف محصول
+      </button>
+    `;
+
+    row.querySelector(".deleteBtn")
+      .addEventListener("click", () => {
+        deleteProduct(String(product.id));
+      });
+
+    container.appendChild(row);
+  });
+}
 
 async function addProduct(storeId) {
 
