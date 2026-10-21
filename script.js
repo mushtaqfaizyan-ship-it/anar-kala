@@ -5178,218 +5178,265 @@ async function updateStore(storeId) {
 
 async function addProduct(storeId) {
 
-  const user =
-    getCurrentUser();
+  const user = getCurrentUser();
 
-  if (
-    !user ||
-    user.type !== "seller"
-  ) {
+  if (!user || user.type !== "seller") {
 
-    alert(
-      "دسترسی غیرمجاز."
-    );
+    alert("دسترسی غیرمجاز.");
 
     return;
+
   }
 
   try {
 
-    const store =
-      await getStoreById(storeId);
+    const store = await getStoreById(storeId);
 
     if (
+
       !store ||
-      store.ownerId !==
-      String(user.id)
+
+      String(store.ownerId) !== String(user.id)
+
     ) {
 
-      alert(
-        "شما مالک این فروشگاه نیستید."
-      );
+      alert("شما مالک این فروشگاه نیستید.");
 
       return;
+
     }
 
     const name =
-      document
-        .getElementById("productName")
-        .value
-        .trim();
+
+      document.getElementById("productName")
+
+        .value.trim();
+
+    const priceInput =
+
+      document.getElementById("productPrice");
 
     const price =
-      document
-        .getElementById("productPrice")
-        .value
-        .trim();
+
+      normalizeDigits(priceInput.value).trim();
+
+    const currencyInput =
+
+      document.getElementById("productCurrency");
+
+    const currency =
+
+      currencyInput
+
+        ? currencyInput.value
+
+        : "AFN";
 
     const whatsapp =
-      document
-        .getElementById("productWhatsapp")
-        .value
-        .trim();
+
+      document.getElementById("productWhatsapp")
+
+        .value.trim();
 
     const description =
-      document
-        .getElementById("productDescription")
-        .value
-        .trim();
+
+      document.getElementById("productDescription")
+
+        .value.trim();
 
     const imageInput =
-      document.getElementById(
-        "productImage"
-      );
+
+      document.getElementById("productImage");
 
     if (!name || !price) {
 
-      alert(
-        "نام و قیمت محصول را وارد کنید."
-      );
+      alert("نام و قیمت محصول را وارد کنید.");
 
       return;
+
     }
 
-    const numericPrice =
-      Number(price);
+    const numericPrice = Number(price);
 
     if (
+
       !Number.isFinite(numericPrice) ||
-      numericPrice < 0
+
+      numericPrice <= 0
+
     ) {
 
-      alert(
-        "قیمت محصول معتبر نیست."
-      );
+      alert("قیمت محصول باید عددی بزرگ‌تر از صفر باشد.");
 
       return;
+
     }
 
-    const image =
-      await uploadFileToStorage(
-        imageInput,
-        "product-images"
-      );
+    if (!["AFN", "USD"].includes(currency)) {
+
+      alert("واحد پول انتخاب‌شده معتبر نیست.");
+
+      return;
+
+    }
+
+    const image = await uploadFileToStorage(
+
+      imageInput,
+
+      "product-images"
+
+    );
 
     await supabaseRequest(
+
       "products",
+
       {
+
         method: "POST",
 
         body: {
 
-          name,
+          name: name,
 
-          price:
-            numericPrice,
+          price: numericPrice,
 
-          description,
+          currency: currency,
 
-          whatsapp,
+          description: description,
 
-          image_url:
-            image,
+          whatsapp: whatsapp,
 
-          store_id:
-            Number(storeId),
+          image_url: image,
 
-          owner_id:
-            Number(user.id)
+          store_id: Number(storeId),
+
+          owner_id: Number(user.id)
 
         }
+
       }
+
     );
 
-    alert(
-      "محصول با موفقیت اضافه شد."
-    );
+    alert("محصول با موفقیت اضافه شد.");
 
     await renderSellerPanel();
 
   } catch (error) {
 
-    console.error(
-      "ADD PRODUCT ERROR:",
-      error
-    );
+    console.error("ADD PRODUCT ERROR:", error);
 
     alert(
+
       "خطای افزودن محصول:\n\n" +
+
       error.message
+
     );
+
   }
+
 }
 
-
 /* =====================================================
-   محصولات فروشنده
+
+   نمایش محصولات فروشنده
+
 ===================================================== */
 
 function renderSellerProducts(products) {
 
   const container =
-    document.getElementById(
-      "sellerProducts"
-    );
+
+    document.getElementById("sellerProducts");
 
   if (!container) {
+
     return;
+
   }
 
   container.innerHTML = "";
 
-  if (!products.length) {
+  if (!products || products.length === 0) {
 
     container.innerHTML = `
+
       <div class="empty">
+
         هنوز محصولی اضافه نکرده‌اید.
+
       </div>
+
     `;
 
     return;
+
   }
 
   products.forEach(product => {
 
-    const row =
-      document.createElement("div");
+    const row = document.createElement("div");
 
-    row.className =
-      "itemRow";
+    row.className = "itemRow";
+
+    const currency =
+
+      product.currency === "USD"
+
+        ? "دالر"
+
+        : "افغانی";
+
+    const imageHTML = product.image
+
+      ? `
+
+        <img
+
+          src="${escapeHTML(product.image)}"
+
+          class="previewImage"
+
+          alt="محصول">
+
+      `
+
+      : "";
 
     row.innerHTML = `
 
-      ${
-        product.image
-          ? `
-            <img
-              src="${escapeHTML(product.image)}"
-              class="previewImage"
-              alt="محصول">
-          `
-          : ""
-      }
+      ${imageHTML}
 
       <h4>
-        ${escapeHTML(product.name)}
+
+        ${escapeHTML(product.name || "")}
+
       </h4>
 
       <p>
+
         قیمت:
-        ${escapeHTML(product.price)}
-        افغانی
+
+        ${escapeHTML(String(product.price ?? ""))}
+
+        ${currency}
+
       </p>
 
       <p>
-        ${escapeHTML(
-          product.description || ""
-        )}
+
+        ${escapeHTML(product.description || "")}
+
       </p>
 
       <button
+
         class="deleteBtn"
-        onclick="
-          deleteProduct('${escapeHTML(product.id)}')
-        ">
+
+        type="button">
 
         حذف محصول
 
@@ -5397,10 +5444,21 @@ function renderSellerProducts(products) {
 
     `;
 
-    container.appendChild(row);
-  });
-}
+    row
 
+      .querySelector(".deleteBtn")
+
+      .addEventListener("click", () => {
+
+        deleteProduct(String(product.id));
+
+      });
+
+    container.appendChild(row);
+
+  });
+
+}
 
 /* =====================================================
    حذف محصول فروشنده
