@@ -1,3 +1,4 @@
+
 {
   "name": "انار کالا",
   "short_name": "انار کالا",
@@ -8,5 +9,17 @@
   "background_color": "#ffffff",
   "theme_color": "#b91c1c",
   "lang": "fa",
-  "dir": "rtl"
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "nar-kala.png.PNG",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "nar-kala.png.PNG",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
