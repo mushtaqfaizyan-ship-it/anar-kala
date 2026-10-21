@@ -203,7 +203,7 @@ const CATEGORIES = {
     ["🥬", "میوه و سبزیجات"],
 
   health:
-    ["💊", "محصولات صحی"],
+    ["📦", " کارخانه ها"],
 
   general:
     ["📦", "عمومی"]
@@ -4233,52 +4233,42 @@ async function registerUser() {
 
   const phone =
     normalizePhone(
-      document
-        .getElementById("registerPhone")
-        .value
+      normalizeDigits(
+        document
+          .getElementById("registerPhone")
+          .value
+      )
     );
 
   const password =
-    document
-      .getElementById("registerPassword")
-      .value;
+    normalizeDigits(
+      document
+        .getElementById("registerPassword")
+        .value
+    );
 
   const type =
     document
       .getElementById("registerType")
       .value;
 
-  if (
-    !name ||
-    !phone ||
-    !password
-  ) {
-
-    alert(
-      "لطفاً همه اطلاعات را وارد کنید."
-    );
-
+  if (!name || !phone || !password) {
+    alert("لطفاً همه اطلاعات را وارد کنید.");
     return;
   }
 
   if (password.length < 6) {
-
-    alert(
-      "رمز عبور باید حداقل ۶ کاراکتر باشد."
-    );
-
+    alert("رمز عبور باید حداقل ۶ کاراکتر باشد.");
     return;
   }
 
   if (
     phone ===
-    normalizePhone(OWNER.phone)
+    normalizePhone(
+      normalizeDigits(OWNER.phone)
+    )
   ) {
-
-    alert(
-      "این شماره متعلق به مالک اصلی سایت است."
-    );
-
+    alert("این شماره متعلق به مالک اصلی سایت است.");
     return;
   }
 
@@ -4299,19 +4289,15 @@ async function registerUser() {
       }
     );
 
-    alert(
-      "ثبت‌نام با موفقیت انجام شد."
-    );
+    alert("ثبت‌نام با موفقیت انجام شد.");
 
     document
       .getElementById("loginPhone")
-      .value =
-      phone;
+      .value = phone;
 
     document
       .getElementById("loginPassword")
-      .value =
-      password;
+      .value = password;
 
     showLogin();
 
@@ -4337,33 +4323,29 @@ async function registerUser() {
 async function loginUser() {
 
   const phoneInput =
-    document.getElementById(
-      "loginPhone"
-    );
+    document.getElementById("loginPhone");
 
   const passwordInput =
-    document.getElementById(
-      "loginPassword"
-    );
+    document.getElementById("loginPassword");
 
   const phone =
     normalizePhone(
-      phoneInput
-        ? phoneInput.value
-        : ""
+      normalizeDigits(
+        phoneInput
+          ? phoneInput.value
+          : ""
+      )
     );
 
   const password =
-    passwordInput
-      ? passwordInput.value
-      : "";
-
-  if (!phone || !password) {
-
-    alert(
-      "شماره تماس و رمز عبور را وارد کنید."
+    normalizeDigits(
+      passwordInput
+        ? passwordInput.value
+        : ""
     );
 
+  if (!phone || !password) {
+    alert("شماره تماس و رمز عبور را وارد کنید.");
     return;
   }
 
@@ -4372,7 +4354,9 @@ async function loginUser() {
 
   if (
     phone ===
-    normalizePhone(OWNER.phone)
+    normalizePhone(
+      normalizeDigits(OWNER.phone)
+    )
   ) {
 
     try {
@@ -4387,22 +4371,11 @@ async function loginUser() {
         );
 
       const ownerUser = {
-
-        id:
-          owner.id,
-
-        name:
-          owner.name,
-
-        phone:
-          owner.phone,
-
-        type:
-          "admin",
-
-        token:
-          owner.token
-
+        id: owner.id,
+        name: owner.name,
+        phone: owner.phone,
+        type: "admin",
+        token: owner.token
       };
 
       setCurrentUser(ownerUser);
@@ -4426,9 +4399,7 @@ async function loginUser() {
         error
       );
 
-      alert(
-        "رمز مالک اشتباه است."
-      );
+      alert("رمز مالک اشتباه است.");
 
       return;
     }
@@ -4456,27 +4427,16 @@ async function loginUser() {
       )
     ) {
 
-      alert(
-        "حساب کاربری نامعتبر است."
-      );
+      alert("حساب کاربری نامعتبر است.");
 
       return;
     }
 
     const currentUser = {
-
-      id:
-        String(user.id),
-
-      name:
-        user.name,
-
-      phone:
-        user.phone,
-
-      type:
-        user.type
-
+      id: String(user.id),
+      name: user.name,
+      phone: user.phone,
+      type: user.type
     };
 
     setCurrentUser(currentUser);
@@ -4490,13 +4450,9 @@ async function loginUser() {
     }
 
     if (user.type === "seller") {
-
       await openSellerPanel();
-
     } else {
-
       await showHome();
-
     }
 
   } catch (error) {
@@ -4511,7 +4467,6 @@ async function loginUser() {
     );
   }
 }
-
 
 /* =====================================================
    خروج
