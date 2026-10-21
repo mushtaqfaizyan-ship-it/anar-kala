@@ -1,4 +1,4 @@
-/* =====================================================
+=====================================================
    انار کالا
    نسخه متصل به Supabase
    خریدار + فروشنده + مالک
@@ -7,6 +7,10 @@
    + جستجوی محصولات داخل فروشگاه
    + سبد خرید
    + سفارش واتساپ
+   + مسدود/فعال کردن کاربر و فروشگاه
+   + حذف کاربر و فروشگاه
+   + فراموشی رمز عبور
+   + آمار بازدید سایت و فروشگاه
 ===================================================== */
 
 
@@ -67,6 +71,7 @@ async function supabaseRequest(table, options = {}) {
       data?.hint ||
       data?.details ||
       data?.error_description ||
+      data?.error ||
       `Supabase Error ${response.status}`
     );
   }
@@ -116,6 +121,7 @@ async function supabaseRpc(
       data?.hint ||
       data?.details ||
       data?.error_description ||
+      data?.error ||
       `RPC Error ${response.status}`
     );
   }
@@ -134,7 +140,10 @@ const STORAGE = {
     "anarKalaCurrentUser",
 
   ownerToken:
-    "anarKalaOwnerToken"
+    "anarKalaOwnerToken",
+
+  siteVisit:
+    "anarKalaSiteVisitDate"
 
 };
 
@@ -203,7 +212,7 @@ const CATEGORIES = {
     ["🥬", "میوه و سبزیجات"],
 
   health:
-    ["📦", " کارخانه ها"],
+    ["💊", "محصولات صحی"],
 
   general:
     ["📦", "عمومی"]
@@ -293,6 +302,36 @@ function normalizeSearchText(value) {
 
 
 /* =====================================================
+   ابزار وضعیت مسدودی
+===================================================== */
+
+function isBlockedValue(value) {
+
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "TRUE"
+  );
+}
+
+
+function isStoreBlocked(store) {
+
+  return !!store &&
+    isBlockedValue(store.isBlocked);
+}
+
+
+function isUserBlocked(user) {
+
+  return !!user &&
+    isBlockedValue(user.is_blocked ?? user.isBlocked);
+}
+
+
+/* =====================================================
    کاربران
 ===================================================== */
 
@@ -356,7 +395,12 @@ async function getStores() {
       ),
 
     logo:
-      store.logo_url || ""
+      store.logo_url || "",
+
+    isBlocked:
+      isBlockedValue(
+        store.is_blocked
+      )
 
   }));
 }
@@ -462,7 +506,12 @@ async function getStoreById(storeId) {
       ),
 
     logo:
-      store.logo_url || ""
+      store.logo_url || "",
+
+    isBlocked:
+      isBlockedValue(
+        store.is_blocked
+      )
 
   };
 }
@@ -696,6 +745,187 @@ async function requireOwnerAccess() {
 
 
 /* =====================================================
+   آمار بازدید سایت
+===================================================== */
+
+function getLocalDateKey() {
+
+  const now = new Date();
+
+  return (
+    now.getFullYear() +
+    "-" +
+    String(
+      now.getMonth() + 1
+    ).padStart(2, "0") +
+    "-" +
+    String(
+      now.getDate()
+    ).padStart(2, "0")
+  );
+}
+
+
+async function registerSiteVisitOncePerDay() {
+
+  try {
+
+    const today =
+      getLocalDateKey();
+
+    const lastVisit =
+      localStorage.getItem(
+        STORAGE.siteVisit
+      );
+
+    if (lastVisit === today) {
+      return;
+    }
+
+    await supabaseRpc(
+      "register_site_visit",
+      {}
+    );
+
+    localStorage.setItem(
+      STORAGE.siteVisit,
+      today
+    );
+
+  } catch (error) {
+
+    console.error(
+      "SITE VISIT ERROR:",
+      error
+    );
+
+  }
+}
+
+
+async function registerStoreVisitOncePerDay(
+  storeId
+) {
+
+  if (!storeId) {
+    return;
+  }
+
+  try {
+
+    const key =
+      "anarKalaStoreVisit_" +
+      String(storeId);
+
+    const today =
+      getLocalDateKey();
+
+    const lastVisit =
+      localStorage.getItem(key);
+
+    if (lastVisit === today) {
+      return;
+    }
+
+    await supabaseRpc(
+      "register_store_visit",
+      {
+        p_store_id:
+          Number(storeId)
+      }
+    );
+
+    localStorage.setItem(
+      key,
+      today
+    );
+
+  } catch (error) {
+
+    console.error(
+      "STORE VISIT ERROR:",
+      error
+    );
+
+  }
+}
+
+
+async function getVisitorStats() {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return null;
+  }
+
+  const token =
+    getOwnerToken();
+
+  return await supabaseRpc(
+    "admin_get_visitor_stats",
+    {
+      p_token: token
+    }
+  );
+}
+
+
+async function getAllStoreVisitorStats() {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return [];
+  }
+
+  const token =
+    getOwnerToken();
+
+  const result =
+    await supabaseRpc(
+      "admin_get_all_store_stats",
+      {
+        p_token: token
+      }
+    );
+
+  return Array.isArray(result)
+    ? result
+    : [];
+}
+
+
+async function getStoreVisitorStats(
+  storeId
+) {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return null;
+  }
+
+  const token =
+    getOwnerToken();
+
+  return await supabaseRpc(
+    "admin_get_store_visitor_stats",
+    {
+      p_store_id:
+        Number(storeId),
+
+      p_token:
+        token
+    }
+  );
+}
+
+
+/* =====================================================
    واتساپ
 ===================================================== */
 
@@ -799,6 +1029,15 @@ async function orderProductOnWhatsapp(
     if (!store) {
 
       alert("فروشگاه پیدا نشد.");
+
+      return;
+    }
+
+    if (store.isBlocked) {
+
+      alert(
+        "این فروشگاه در حال حاضر مسدود است."
+      );
 
       return;
     }
@@ -1252,6 +1491,7 @@ async function performHomeSearch() {
 
     let html = "";
 
+
     /* ===============================================
        جستجوی دسته‌بندی
     =============================================== */
@@ -1353,6 +1593,10 @@ async function performHomeSearch() {
       const storeResults =
         stores.filter(store => {
 
+          if (store.isBlocked) {
+            return false;
+          }
+
           const name =
             normalizeSearchText(
               store.name
@@ -1428,6 +1672,17 @@ async function performHomeSearch() {
             normalizeSearchText(
               product.description
             );
+
+          const store =
+            stores.find(
+              item =>
+                String(item.id) ===
+                String(product.storeId)
+            );
+
+          if (store && store.isBlocked) {
+            return false;
+          }
 
           return (
             name.includes(query) ||
@@ -1518,6 +1773,10 @@ function selectSearchCategory(category) {
 
 function createStoreCardHTML(store) {
 
+  if (!store || store.isBlocked) {
+    return "";
+  }
+
   const logo =
     store.logo || "";
 
@@ -1580,6 +1839,10 @@ function createSearchProductHTML(
   product,
   store
 ) {
+
+  if (store && store.isBlocked) {
+    return "";
+  }
 
   return `
 
@@ -1662,10 +1925,6 @@ async function initialize() {
 
   renderCategories();
 
-  /*
-     بدون انتخاب دسته، فروشگاه‌ها نمایش داده نمی‌شوند.
-  */
-
   renderStores([]);
 
   try {
@@ -1691,6 +1950,13 @@ async function initialize() {
   }
 
   updateGlobalCartButton();
+
+  /*
+     ثبت بازدید سایت.
+     در هر مرورگر فقط یک بار در روز ثبت می‌شود.
+  */
+
+  registerSiteVisitOncePerDay();
 }
 
 
@@ -1738,12 +2004,6 @@ async function showHome() {
 
   ensureHomeSearchBox();
 
-  /*
-     هنگام برگشت به خانه، دسته‌های قبلی حفظ می‌شوند.
-     اگر دسته انتخاب شده باشد، فروشگاه‌های همان دسته
-     نمایش داده می‌شوند.
-  */
-
   if (selectedCategories.length) {
 
     await showSelectedStores(
@@ -1782,14 +2042,6 @@ async function showHome() {
 
 function renderCategories() {
 
-  /*
-     HTML جدید:
-     categoriesList
-
-     سازگاری با نسخه قدیمی:
-     categories
-  */
-
   const container =
     document.getElementById(
       "categoriesList"
@@ -1818,10 +2070,6 @@ function renderCategories() {
 
       const div =
         document.createElement("div");
-
-      /*
-         کلاس‌های فعلی CSS حفظ می‌شوند.
-      */
 
       div.className =
         "categoryItem" +
@@ -1875,7 +2123,9 @@ function renderCategories() {
         }
       );
 
-      container.appendChild(div);
+      container.appendChild(
+        div
+      );
 
     });
 
@@ -1908,11 +2158,6 @@ function toggleCategory(category) {
   }
 
   renderCategories();
-
-  /*
-     بعد از انتخاب/لغو دسته، فوراً
-     فروشگاه‌های مربوطه بروزرسانی می‌شوند.
-  */
 
   if (selectedCategories.length) {
 
@@ -2012,6 +2257,10 @@ async function showSelectedStores(
     const filtered =
       stores.filter(store => {
 
+        if (store.isBlocked) {
+          return false;
+        }
+
         const category =
           normalizeCategoryKey(
             store.category
@@ -2089,11 +2338,14 @@ function renderStores(stores) {
   container.innerHTML = "";
 
   if (!stores.length) {
-
     return;
   }
 
   stores.forEach(store => {
+
+    if (store.isBlocked) {
+      return;
+    }
 
     const card =
       document.createElement("div");
@@ -2101,13 +2353,12 @@ function renderStores(stores) {
     card.innerHTML =
       createStoreCardHTML(store);
 
-    /*
-       createStoreCardHTML خودش یک .storeCard می‌سازد.
-    */
+    if (card.firstElementChild) {
 
-    container.appendChild(
-      card.firstElementChild
-    );
+      container.appendChild(
+        card.firstElementChild
+      );
+    }
 
   });
 }
@@ -2133,6 +2384,37 @@ async function openStore(storeId) {
       return;
     }
 
+    /*
+       فروشگاه مسدود فقط برای مالک خودش
+       یا مالک اصلی سایت قابل مشاهده است.
+    */
+
+    const currentUser =
+      getCurrentUser();
+
+    const canViewBlocked =
+      (
+        isOwner(currentUser)
+      ) ||
+      (
+        currentUser &&
+        currentUser.type === "seller" &&
+        String(currentUser.id) ===
+          String(store.ownerId)
+      );
+
+    if (
+      store.isBlocked &&
+      !canViewBlocked
+    ) {
+
+      alert(
+        "این فروشگاه توسط مالک سایت مسدود شده است."
+      );
+
+      return;
+    }
+
     hideAllPages();
 
     const storePage =
@@ -2149,6 +2431,18 @@ async function openStore(storeId) {
 
     window.currentAnarKalaStoreId =
       String(store.id);
+
+    /*
+       بازدید فروشگاه
+       فقط برای بازدید عمومی ثبت می‌شود.
+    */
+
+    if (!store.isBlocked) {
+
+      registerStoreVisitOncePerDay(
+        store.id
+      );
+    }
 
     const logo =
       store.logo || "";
@@ -2209,6 +2503,19 @@ async function openStore(storeId) {
                     ${escapeHTML(
                       store.phone
                     )}
+                  </p>
+                `
+                : ""
+            }
+
+            ${
+              store.isBlocked
+                ? `
+                  <p style="
+                    color:#b00020;
+                    font-weight:bold;
+                  ">
+                    ⚠️ این فروشگاه مسدود است.
                   </p>
                 `
                 : ""
@@ -2356,6 +2663,36 @@ async function searchProductsInCurrentStore() {
     input.value.trim();
 
   try {
+
+    const store =
+      await getStoreById(storeId);
+
+    if (
+      store &&
+      store.isBlocked
+    ) {
+
+      const user =
+        getCurrentUser();
+
+      const allowed =
+        isOwner(user) ||
+        (
+          user &&
+          user.type === "seller" &&
+          String(user.id) ===
+            String(store.ownerId)
+        );
+
+      if (!allowed) {
+
+        alert(
+          "این فروشگاه مسدود است."
+        );
+
+        return;
+      }
+    }
 
     const products =
       await getProductsByStore(
@@ -2553,7 +2890,6 @@ async function renderStoreProducts(
         </button>
 
       </div>
-
     `;
 
     container.appendChild(card);
@@ -2574,6 +2910,7 @@ function getCartStorageKey(storeId) {
     "anarKalaCart_" +
     String(storeId)
   );
+
 }
 
 
@@ -2595,7 +2932,9 @@ function getStoreCart(storeId) {
   } catch {
 
     return [];
+
   }
+
 }
 
 
@@ -2620,6 +2959,7 @@ function saveStoreCart(
     getCartStorageKey(storeId),
     JSON.stringify(cart)
   );
+
 }
 
 
@@ -2662,10 +3002,13 @@ function getAllCartStoreIds() {
       ids.push(
         String(storeId)
       );
+
     }
+
   }
 
   return ids;
+
 }
 
 
@@ -2678,6 +3021,7 @@ function getAllCartCount() {
         getCartCount(storeId),
       0
     );
+
 }
 
 
@@ -2690,6 +3034,7 @@ function getAllCartTotal() {
         getCartTotal(storeId),
       0
     );
+
 }
 
 
@@ -2699,6 +3044,21 @@ async function addToCart(
 ) {
 
   try {
+
+    const store =
+      await getStoreById(storeId);
+
+    if (
+      store &&
+      store.isBlocked
+    ) {
+
+      alert(
+        "این فروشگاه مسدود است و امکان خرید وجود ندارد."
+      );
+
+      return;
+    }
 
     const products =
       await getProductsByStore(
@@ -2759,6 +3119,7 @@ async function addToCart(
           1
 
       });
+
     }
 
     saveStoreCart(
@@ -2784,7 +3145,9 @@ async function addToCart(
       "افزودن به سبد خرید انجام نشد:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -2797,6 +3160,7 @@ function getCartCount(storeId) {
         Number(item.quantity || 0),
       0
     );
+
 }
 
 
@@ -2812,6 +3176,7 @@ function getCartTotal(storeId) {
         ),
       0
     );
+
 }
 
 
@@ -2892,6 +3257,7 @@ function updateCartButton() {
   storeHeader.appendChild(
     button
   );
+
 }
 
 
@@ -2907,13 +3273,9 @@ function updateGlobalCartButton() {
   const possibleIds = [
 
     "buyerCartBtn",
-
     "globalCartButton",
-
     "allCartButton",
-
     "cartButton",
-
     "navbarCartButton"
 
   ];
@@ -2948,7 +3310,9 @@ function updateGlobalCartButton() {
           ? " (" + toFaDigits(count) + ")"
           : ""
       );
+
   }
+
 }
 
 
@@ -2971,9 +3335,19 @@ async function buildCartWhatsappMessage(
     await getStoreById(storeId);
 
   if (!store) {
+
     throw new Error(
       "فروشگاه پیدا نشد."
     );
+
+  }
+
+  if (store.isBlocked) {
+
+    throw new Error(
+      "این فروشگاه مسدود است."
+    );
+
   }
 
   let message =
@@ -3016,6 +3390,7 @@ async function buildCartWhatsappMessage(
         "   💵 مجموع: " +
         total.toLocaleString("fa-AF") +
         " افغانی\n\n";
+
     }
   );
 
@@ -3041,6 +3416,7 @@ async function buildCartWhatsappMessage(
       )
 
   };
+
 }
 
 
@@ -3090,11 +3466,6 @@ async function sendCartToWhatsapp(
         data.message
       );
 
-    /*
-       اگر لینک واتساپ باز شد،
-       فقط سبد همین فروشگاه خالی می‌شود.
-    */
-
     if (opened) {
 
       saveStoreCart(
@@ -3122,6 +3493,7 @@ async function sendCartToWhatsapp(
       if (allModal) {
         allModal.remove();
       }
+
     }
 
   } catch (error) {
@@ -3135,7 +3507,9 @@ async function sendCartToWhatsapp(
       "ارسال سفارش انجام نشد:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -3270,11 +3644,16 @@ function openCart(storeId) {
             </div>
 
             <p>
+
               مجموع:
+
               <strong>
+
                 ${toFaDigits(itemTotal)}
                 افغانی
+
               </strong>
+
             </p>
 
             <button
@@ -3296,6 +3675,7 @@ function openCart(storeId) {
         `;
 
       }).join("");
+
   }
 
   const total =
@@ -3346,13 +3726,14 @@ function openCart(storeId) {
       ${
         cart.length
           ? `
-
             <hr>
 
             <h3>
+
               مجموع کل:
               ${toFaDigits(total)}
               افغانی
+
             </h3>
 
             <button
@@ -3395,6 +3776,7 @@ function openCart(storeId) {
   `;
 
   document.body.appendChild(modal);
+
 }
 
 
@@ -3564,9 +3946,7 @@ async function openAllCarts() {
   }
 
   let html = "";
-
   let grandTotal = 0;
-
   let grandCount = 0;
 
   for (const storeId of storeIds) {
@@ -3656,6 +4036,7 @@ async function openAllCarts() {
             </strong>
 
           </div>
+
       `;
 
       cart.forEach(item => {
@@ -3746,9 +4127,12 @@ async function openAllCarts() {
                 ">
 
                 مجموع:
+
                 <strong>
+
                   ${toFaDigits(itemTotal)}
                   افغانی
+
                 </strong>
 
               </div>
@@ -3781,7 +4165,9 @@ async function openAllCarts() {
               </button>
 
               <strong>
+
                 ${toFaDigits(quantity)}
+
               </strong>
 
               <button
@@ -3821,6 +4207,7 @@ async function openAllCarts() {
           </div>
 
         `;
+
       });
 
       html += `
@@ -3846,8 +4233,10 @@ async function openAllCarts() {
               </strong>
 
               <strong>
+
                 ${toFaDigits(storeTotal)}
                 افغانی
+
               </strong>
 
             </div>
@@ -3920,16 +4309,23 @@ async function openAllCarts() {
         </div>
 
       `;
+
     }
+
   }
 
   if (!html) {
 
     html = `
+
       <div class="empty">
+
         🛒 سبد سفارش شما خالی است.
+
       </div>
+
     `;
+
   }
 
   html += `
@@ -3954,7 +4350,9 @@ async function openAllCarts() {
         </strong>
 
         <strong>
+
           ${toFaDigits(grandCount)}
+
         </strong>
 
       </div>
@@ -3972,8 +4370,10 @@ async function openAllCarts() {
         </strong>
 
         <strong>
+
           ${toFaDigits(grandTotal)}
           افغانی
+
         </strong>
 
       </div>
@@ -3995,6 +4395,7 @@ async function openAllCarts() {
   `;
 
   content.innerHTML = html;
+
 }
 
 
@@ -4043,6 +4444,7 @@ function changeAllCartQuantity(
   updateGlobalCartButton();
 
   openAllCarts();
+
 }
 
 
@@ -4070,6 +4472,7 @@ function removeFromAllCarts(
   updateGlobalCartButton();
 
   openAllCarts();
+
 }
 
 
@@ -4102,6 +4505,7 @@ function changeCartQuantity(
       cart.indexOf(item);
 
     cart.splice(index, 1);
+
   }
 
   saveStoreCart(
@@ -4113,6 +4517,7 @@ function changeCartQuantity(
   updateGlobalCartButton();
 
   openCart(storeId);
+
 }
 
 
@@ -4140,6 +4545,7 @@ function removeFromCart(
   updateGlobalCartButton();
 
   openCart(storeId);
+
 }
 
 
@@ -4164,6 +4570,7 @@ function openAuth() {
   }
 
   showLogin();
+
 }
 
 
@@ -4180,16 +4587,23 @@ function showLogin() {
     );
 
   if (loginBox) {
+
     loginBox.classList.remove(
       "hidden"
     );
+
   }
 
   if (registerBox) {
+
     registerBox.classList.add(
       "hidden"
     );
+
   }
+
+  ensureForgotPasswordBox();
+
 }
 
 
@@ -4206,16 +4620,267 @@ function showRegister() {
     );
 
   if (loginBox) {
+
     loginBox.classList.add(
       "hidden"
     );
+
   }
 
   if (registerBox) {
+
     registerBox.classList.remove(
       "hidden"
     );
+
   }
+
+}
+
+
+/* =====================================================
+   فراموشی رمز عبور
+===================================================== */
+
+function ensureForgotPasswordBox() {
+
+  const loginBox =
+    document.getElementById(
+      "loginBox"
+    );
+
+  if (!loginBox) {
+    return;
+  }
+
+  if (
+    document.getElementById(
+      "forgotPasswordButton"
+    )
+  ) {
+    return;
+  }
+
+  const wrapper =
+    document.createElement("div");
+
+  wrapper.style.cssText = `
+    margin-top:12px;
+    text-align:center;
+  `;
+
+  wrapper.innerHTML = `
+
+    <button
+      id="forgotPasswordButton"
+      type="button"
+      style="
+        background:none;
+        border:none;
+        color:#b5122b;
+        cursor:pointer;
+        text-decoration:underline;
+        font-size:14px;
+      "
+      onclick="openForgotPassword()">
+
+      🔑 رمز خود را فراموش کردم
+
+    </button>
+
+  `;
+
+  loginBox.appendChild(wrapper);
+
+}
+
+
+function openForgotPassword() {
+
+  const old =
+    document.getElementById(
+      "forgotPasswordModal"
+    );
+
+  if (old) {
+    old.remove();
+  }
+
+  const modal =
+    document.createElement("div");
+
+  modal.id =
+    "forgotPasswordModal";
+
+  modal.style.cssText = `
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.55);
+    z-index:100000;
+    padding:20px;
+    overflow-y:auto;
+  `;
+
+  modal.innerHTML = `
+
+    <div
+      style="
+        max-width:480px;
+        margin:50px auto;
+        background:#fff;
+        border-radius:18px;
+        padding:22px;
+        color:#222;
+      ">
+
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          gap:10px;
+        ">
+
+        <h2>
+          🔑 فراموشی رمز عبور
+        </h2>
+
+        <button
+          type="button"
+          onclick="
+            document
+              .getElementById(
+                'forgotPasswordModal'
+              )
+              .remove()
+          ">
+
+          ✕
+
+        </button>
+
+      </div>
+
+      <p>
+
+        شماره تماس خود را وارد کنید.
+        درخواست تغییر رمز برای مالک سایت ارسال می‌شود.
+
+      </p>
+
+      <input
+        id="forgotPasswordPhone"
+        type="tel"
+        placeholder="شماره تماس"
+        style="
+          width:100%;
+          margin:10px 0;
+        ">
+
+      <button
+        type="button"
+        class="mainBtn"
+        style="width:100%;"
+        onclick="submitForgotPassword()">
+
+        ارسال درخواست
+
+      </button>
+
+    </div>
+
+  `;
+
+  document.body.appendChild(modal);
+
+}
+
+
+async function submitForgotPassword() {
+
+  const input =
+    document.getElementById(
+      "forgotPasswordPhone"
+    );
+
+  if (!input) {
+    return;
+  }
+
+  const phone =
+    normalizePhone(
+      input.value
+    );
+
+  if (!phone) {
+
+    alert(
+      "شماره تماس را وارد کنید."
+    );
+
+    return;
+  }
+
+  if (
+    phone ===
+    normalizePhone(OWNER.phone)
+  ) {
+
+    alert(
+      "برای تغییر رمز مالک از بخش مدیریت استفاده کنید."
+    );
+
+    return;
+  }
+
+  try {
+
+    /*
+       ابتدا درخواست عمومی کاربران ثبت می‌شود.
+       این RPC خودش کاربر واقعی را پیدا می‌کند.
+    */
+
+    const result =
+      await supabaseRpc(
+        "request_password_reset",
+        {
+          p_phone: phone
+        }
+      );
+
+    console.log(
+      "PASSWORD RESET REQUEST:",
+      result
+    );
+
+    alert(
+      "درخواست شما برای مالک سایت ارسال شد.\n\n" +
+      "مالک می‌تواند رمز موقت برای شما تعیین کند."
+    );
+
+    const modal =
+      document.getElementById(
+        "forgotPasswordModal"
+      );
+
+    if (modal) {
+      modal.remove();
+    }
+
+  } catch (error) {
+
+    console.error(
+      "FORGOT PASSWORD ERROR:",
+      error
+    );
+
+    alert(
+      "ارسال درخواست انجام نشد:\n\n" +
+      error.message
+    );
+
+  }
+
 }
 
 
@@ -4233,42 +4898,52 @@ async function registerUser() {
 
   const phone =
     normalizePhone(
-      normalizeDigits(
-        document
-          .getElementById("registerPhone")
-          .value
-      )
+      document
+        .getElementById("registerPhone")
+        .value
     );
 
   const password =
-    normalizeDigits(
-      document
-        .getElementById("registerPassword")
-        .value
-    );
+    document
+      .getElementById("registerPassword")
+      .value;
 
   const type =
     document
       .getElementById("registerType")
       .value;
 
-  if (!name || !phone || !password) {
-    alert("لطفاً همه اطلاعات را وارد کنید.");
+  if (
+    !name ||
+    !phone ||
+    !password
+  ) {
+
+    alert(
+      "لطفاً همه اطلاعات را وارد کنید."
+    );
+
     return;
   }
 
   if (password.length < 6) {
-    alert("رمز عبور باید حداقل ۶ کاراکتر باشد.");
+
+    alert(
+      "رمز عبور باید حداقل ۶ کاراکتر باشد."
+    );
+
     return;
   }
 
   if (
     phone ===
-    normalizePhone(
-      normalizeDigits(OWNER.phone)
-    )
+    normalizePhone(OWNER.phone)
   ) {
-    alert("این شماره متعلق به مالک اصلی سایت است.");
+
+    alert(
+      "این شماره متعلق به مالک اصلی سایت است."
+    );
+
     return;
   }
 
@@ -4289,15 +4964,54 @@ async function registerUser() {
       }
     );
 
-    alert("ثبت‌نام با موفقیت انجام شد.");
+    alert(
+      "ثبت‌نام با موفقیت انجام شد."
+    );
 
-    document
-      .getElementById("loginPhone")
-      .value = phone;
+    const loginPhone =
+      document.getElementById(
+        "loginPhone"
+      );
 
-    document
-      .getElementById("loginPassword")
-      .value = password;
+    const loginPassword =
+      document.getElementById(
+        "loginPassword"
+      );
+
+    if (loginPhone) {
+      loginPhone.value = phone;
+    }
+
+    if (loginPassword) {
+      loginPassword.value = password;
+    }
+
+    const registerName =
+      document.getElementById(
+        "registerName"
+      );
+
+    const registerPhone =
+      document.getElementById(
+        "registerPhone"
+      );
+
+    const registerPassword =
+      document.getElementById(
+        "registerPassword"
+      );
+
+    if (registerName) {
+      registerName.value = "";
+    }
+
+    if (registerPhone) {
+      registerPhone.value = "";
+    }
+
+    if (registerPassword) {
+      registerPassword.value = "";
+    }
 
     showLogin();
 
@@ -4312,7 +5026,9 @@ async function registerUser() {
       "خطای ثبت‌نام:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -4323,40 +5039,44 @@ async function registerUser() {
 async function loginUser() {
 
   const phoneInput =
-    document.getElementById("loginPhone");
+    document.getElementById(
+      "loginPhone"
+    );
 
   const passwordInput =
-    document.getElementById("loginPassword");
+    document.getElementById(
+      "loginPassword"
+    );
 
   const phone =
     normalizePhone(
-      normalizeDigits(
-        phoneInput
-          ? phoneInput.value
-          : ""
-      )
-    );
-
-  const password =
-    normalizeDigits(
-      passwordInput
-        ? passwordInput.value
+      phoneInput
+        ? phoneInput.value
         : ""
     );
 
+  const password =
+    passwordInput
+      ? passwordInput.value
+      : "";
+
   if (!phone || !password) {
-    alert("شماره تماس و رمز عبور را وارد کنید.");
+
+    alert(
+      "شماره تماس و رمز عبور را وارد کنید."
+    );
+
     return;
   }
 
 
-  /* مالک */
+  /* ===================================================
+     مالک
+  =================================================== */
 
   if (
     phone ===
-    normalizePhone(
-      normalizeDigits(OWNER.phone)
-    )
+    normalizePhone(OWNER.phone)
   ) {
 
     try {
@@ -4371,11 +5091,22 @@ async function loginUser() {
         );
 
       const ownerUser = {
-        id: owner.id,
-        name: owner.name,
-        phone: owner.phone,
-        type: "admin",
-        token: owner.token
+
+        id:
+          owner.id,
+
+        name:
+          owner.name,
+
+        phone:
+          owner.phone,
+
+        type:
+          "admin",
+
+        token:
+          owner.token
+
       };
 
       setCurrentUser(ownerUser);
@@ -4399,14 +5130,19 @@ async function loginUser() {
         error
       );
 
-      alert("رمز مالک اشتباه است.");
+      alert(
+        "رمز مالک اشتباه است."
+      );
 
       return;
     }
+
   }
 
 
-  /* خریدار / فروشنده */
+  /* ===================================================
+     خریدار / فروشنده
+  =================================================== */
 
   try {
 
@@ -4419,24 +5155,60 @@ async function loginUser() {
         }
       );
 
+    if (!user) {
+
+      alert(
+        "حساب کاربری پیدا نشد."
+      );
+
+      return;
+    }
+
     if (
-      !user ||
-      (
-        user.type !== "buyer" &&
-        user.type !== "seller"
+      user.type !== "buyer" &&
+      user.type !== "seller"
+    ) {
+
+      alert(
+        "حساب کاربری نامعتبر است."
+      );
+
+      return;
+    }
+
+    /*
+       اگر نسخه RPC وضعیت مسدودی را هم برگرداند،
+       قبل از ورود آن را بررسی می‌کنیم.
+    */
+
+    if (
+      isBlockedValue(
+        user.is_blocked ??
+        user.isBlocked
       )
     ) {
 
-      alert("حساب کاربری نامعتبر است.");
+      alert(
+        "حساب شما توسط مالک سایت مسدود شده است."
+      );
 
       return;
     }
 
     const currentUser = {
-      id: String(user.id),
-      name: user.name,
-      phone: user.phone,
-      type: user.type
+
+      id:
+        String(user.id),
+
+      name:
+        user.name,
+
+      phone:
+        user.phone,
+
+      type:
+        user.type
+
     };
 
     setCurrentUser(currentUser);
@@ -4450,9 +5222,13 @@ async function loginUser() {
     }
 
     if (user.type === "seller") {
+
       await openSellerPanel();
+
     } else {
+
       await showHome();
+
     }
 
   } catch (error) {
@@ -4462,11 +5238,36 @@ async function loginUser() {
       error
     );
 
+    /*
+       اگر RPC جدید خطای مسدود بودن برگرداند،
+       همان پیام را به کاربر نشان می‌دهیم.
+    */
+
+    const errorText =
+      String(
+        error?.message || ""
+      );
+
+    if (
+      errorText.includes("مسدود") ||
+      errorText.toLowerCase().includes("blocked")
+    ) {
+
+      alert(
+        "حساب شما توسط مالک سایت مسدود شده است."
+      );
+
+      return;
+    }
+
     alert(
       "شماره تماس یا رمز عبور اشتباه است."
     );
+
   }
+
 }
+
 
 /* =====================================================
    خروج
@@ -4487,6 +5288,7 @@ function logout() {
   window.currentAnarKalaStoreId = "";
 
   showHome();
+
 }
 
 
@@ -4528,6 +5330,7 @@ async function openSellerPanel() {
   }
 
   await renderSellerPanel();
+
 }
 
 
@@ -4540,6 +5343,7 @@ async function renderSellerPanel() {
     !user ||
     user.type !== "seller"
   ) {
+
     return;
   }
 
@@ -4658,7 +5462,9 @@ async function renderSellerPanel() {
       "خطای پنل فروشنده:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -4693,6 +5499,29 @@ async function renderSellerDashboard(
 
   content.innerHTML = `
 
+    ${
+      store.isBlocked
+        ? `
+          <div
+            class="panelBox"
+            style="
+              border:2px solid #b5122b;
+            ">
+
+            <h3 style="color:#b5122b;">
+              ⚠️ فروشگاه شما مسدود شده است
+            </h3>
+
+            <p>
+              فروشگاه تا زمانی که مالک سایت آن را فعال نکند،
+              برای عموم قابل مشاهده نیست.
+            </p>
+
+          </div>
+        `
+        : ""
+    }
+
     <div class="panelBox">
 
       <h3>
@@ -4711,21 +5540,26 @@ async function renderSellerDashboard(
       }
 
       <p>
+
         نام:
+
         <strong>
           ${escapeHTML(store.name)}
         </strong>
+
       </p>
 
       <p>
+
         دسته:
+
         ${escapeHTML(
           getCategoryName(store.category)
         )}
+
       </p>
 
     </div>
-
 
     <div class="panelBox">
 
@@ -4776,7 +5610,7 @@ async function renderSellerDashboard(
             accept="image/*">
 
           <p class="uploadHint">
-            حداکثر حجم 5MB.
+            حداکثر 5MB.
           </p>
 
         </div>
@@ -4794,7 +5628,6 @@ async function renderSellerDashboard(
       </button>
 
     </div>
-
 
     <div class="panelBox">
 
@@ -4853,7 +5686,6 @@ async function renderSellerDashboard(
 
     </div>
 
-
     <div class="panelBox">
 
       <h3>
@@ -4867,6 +5699,7 @@ async function renderSellerDashboard(
   `;
 
   renderSellerProducts(myProducts);
+
 }
 
 
@@ -5010,7 +5843,9 @@ async function createStore() {
       "خطای ساخت فروشگاه:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -5118,6 +5953,7 @@ async function updateStore(storeId) {
           imageInput,
           "store-logos"
         );
+
     }
 
     await supabaseRequest(
@@ -5168,460 +6004,232 @@ async function updateStore(storeId) {
       "خطای ذخیره تغییرات:\n\n" +
       error.message
     );
-  }
-}
 
+  }
+
+}
 
 
 /* =====================================================
    افزودن محصول
-   پشتیبانی از ارقام فارسی، عربی و انگلیسی
-   انتخاب افغانی یا دالر
 ===================================================== */
 
 async function addProduct(storeId) {
 
-  const user = getCurrentUser();
+  const user =
+    getCurrentUser();
 
-  if (!user || user.type !== "seller") {
-    alert("دسترسی غیرمجاز.");
-    return;
-  }
-
-  try {
-
-    const store = await getStoreById(storeId);
-
-    if (
-      !store ||
-      String(store.ownerId) !== String(user.id)
-    ) {
-      alert("شما مالک این فروشگاه نیستید.");
-      return;
-    }
-
-    const name =
-      document.getElementById("productName")
-        .value.trim();
-
-    const priceInput =
-      document.getElementById("productPrice");
-
-    const price =
-      normalizeDigits(priceInput.value)
-        .replace(/[٬،,]/g, "")
-        .replace(/٫/g, ".")
-        .trim();
-
-    const currencyInput =
-      document.getElementById("productCurrency");
-
-    const currency =
-      currencyInput
-        ? currencyInput.value
-        : "AFN";
-
-    const whatsapp =
-      document.getElementById("productWhatsapp")
-        .value.trim();
-
-    const description =
-      document.getElementById("productDescription")
-        .value.trim();
-
-    const imageInput =
-      document.getElementById("productImage");
-
-    if (!name || !price) {
-      alert("نام و قیمت محصول را وارد کنید.");
-      return;
-    }
-
-    const numericPrice = Number(price);
-
-    if (
-      !Number.isFinite(numericPrice) ||
-      numericPrice <= 0
-    ) {
-      alert("قیمت محصول باید عددی بزرگ‌تر از صفر باشد.");
-      return;
-    }
-
-    if (!["AFN", "USD"].includes(currency)) {
-      alert("واحد پول انتخاب‌شده معتبر نیست.");
-      return;
-    }
-
-    const image = await uploadFileToStorage(
-      imageInput,
-      "product-images"
-    );
-
-    await supabaseRequest("products", {
-      method: "POST",
-      body: {
-        name: name,
-        price: numericPrice,
-        currency: currency,
-        description: description,
-        whatsapp: whatsapp,
-        image_url: image,
-        store_id: Number(storeId),
-        owner_id: Number(user.id)
-      }
-    });
-
-    alert("محصول با موفقیت اضافه شد.");
-
-    await renderSellerPanel();
-
-  } catch (error) {
-
-    console.error("ADD PRODUCT ERROR:", error);
+  if (
+    !user ||
+    user.type !== "seller"
+  ) {
 
     alert(
-      "خطای افزودن محصول:\n\n" +
-      error.message
+      "دسترسی غیرمجاز."
     );
-  }
-}
-
-
-/* =====================================================
-   نمایش محصولات فروشنده
-===================================================== */
-
-function renderSellerProducts(products) {
-
-  const container =
-    document.getElementById("sellerProducts");
-
-  if (!container) {
-    return;
-  }
-
-  container.innerHTML = "";
-
-  if (!products || products.length === 0) {
-    container.innerHTML = `
-      <div class="empty">
-        هنوز محصولی اضافه نکرده‌اید.
-      </div>
-    `;
-    return;
-  }
-
-  products.forEach(product => {
-
-    const row = document.createElement("div");
-    row.className = "itemRow";
-
-    const currency =
-      product.currency === "USD"
-        ? "دالر آمریکا"
-        : "افغانی";
-
-    const imageHTML = product.image
-      ? `
-        <img
-          src="${escapeHTML(product.image)}"
-          class="previewImage"
-          alt="محصول">
-      `
-      : "";
-
-    row.innerHTML = `
-      ${imageHTML}
-
-      <h4>${escapeHTML(product.name || "")}</h4>
-
-      <p>
-        قیمت:
-        ${escapeHTML(String(product.price ?? ""))}
-        ${currency}
-      </p>
-
-      <p>
-        ${escapeHTML(product.description || "")}
-      </p>
-
-      <button
-        class="deleteBtn"
-        type="button">
-        حذف محصول
-      </button>
-    `;
-
-    row.querySelector(".deleteBtn")
-      .addEventListener("click", () => {
-        deleteProduct(String(product.id));
-      });
-
-    container.appendChild(row);
-  });
-}
-
-async function addProduct(storeId) {
-
-  const user = getCurrentUser();
-
-  if (!user || user.type !== "seller") {
-
-    alert("دسترسی غیرمجاز.");
 
     return;
-
   }
 
   try {
 
-    const store = await getStoreById(storeId);
+    const store =
+      await getStoreById(storeId);
 
     if (
-
       !store ||
-
-      String(store.ownerId) !== String(user.id)
-
+      store.ownerId !==
+      String(user.id)
     ) {
 
-      alert("شما مالک این فروشگاه نیستید.");
+      alert(
+        "شما مالک این فروشگاه نیستید."
+      );
 
       return;
-
     }
 
     const name =
-
-      document.getElementById("productName")
-
-        .value.trim();
-
-    const priceInput =
-
-      document.getElementById("productPrice");
+      document
+        .getElementById("productName")
+        .value
+        .trim();
 
     const price =
-
-      normalizeDigits(priceInput.value).trim();
-
-    const currencyInput =
-
-      document.getElementById("productCurrency");
-
-    const currency =
-
-      currencyInput
-
-        ? currencyInput.value
-
-        : "AFN";
+      document
+        .getElementById("productPrice")
+        .value
+        .trim();
 
     const whatsapp =
-
-      document.getElementById("productWhatsapp")
-
-        .value.trim();
+      document
+        .getElementById("productWhatsapp")
+        .value
+        .trim();
 
     const description =
-
-      document.getElementById("productDescription")
-
-        .value.trim();
+      document
+        .getElementById("productDescription")
+        .value
+        .trim();
 
     const imageInput =
-
-      document.getElementById("productImage");
+      document.getElementById(
+        "productImage"
+      );
 
     if (!name || !price) {
 
-      alert("نام و قیمت محصول را وارد کنید.");
+      alert(
+        "نام و قیمت محصول را وارد کنید."
+      );
 
       return;
-
     }
 
-    const numericPrice = Number(price);
+    const numericPrice =
+      Number(price);
 
     if (
-
       !Number.isFinite(numericPrice) ||
-
-      numericPrice <= 0
-
+      numericPrice < 0
     ) {
 
-      alert("قیمت محصول باید عددی بزرگ‌تر از صفر باشد.");
+      alert(
+        "قیمت محصول معتبر نیست."
+      );
 
       return;
-
     }
 
-    if (!["AFN", "USD"].includes(currency)) {
-
-      alert("واحد پول انتخاب‌شده معتبر نیست.");
-
-      return;
-
-    }
-
-    const image = await uploadFileToStorage(
-
-      imageInput,
-
-      "product-images"
-
-    );
+    const image =
+      await uploadFileToStorage(
+        imageInput,
+        "product-images"
+      );
 
     await supabaseRequest(
-
       "products",
-
       {
-
         method: "POST",
 
         body: {
 
-          name: name,
+          name,
 
-          price: numericPrice,
+          price:
+            numericPrice,
 
-          currency: currency,
+          description,
 
-          description: description,
+          whatsapp,
 
-          whatsapp: whatsapp,
+          image_url:
+            image,
 
-          image_url: image,
+          store_id:
+            Number(storeId),
 
-          store_id: Number(storeId),
-
-          owner_id: Number(user.id)
+          owner_id:
+            Number(user.id)
 
         }
-
       }
-
     );
 
-    alert("محصول با موفقیت اضافه شد.");
+    alert(
+      "محصول با موفقیت اضافه شد."
+    );
 
     await renderSellerPanel();
 
   } catch (error) {
 
-    console.error("ADD PRODUCT ERROR:", error);
+    console.error(
+      "ADD PRODUCT ERROR:",
+      error
+    );
 
     alert(
-
       "خطای افزودن محصول:\n\n" +
-
       error.message
-
     );
 
   }
 
 }
 
+
 /* =====================================================
-
-   نمایش محصولات فروشنده
-
+   محصولات فروشنده
 ===================================================== */
 
 function renderSellerProducts(products) {
 
   const container =
-
-    document.getElementById("sellerProducts");
+    document.getElementById(
+      "sellerProducts"
+    );
 
   if (!container) {
-
     return;
-
   }
 
   container.innerHTML = "";
 
-  if (!products || products.length === 0) {
+  if (!products.length) {
 
     container.innerHTML = `
-
       <div class="empty">
-
         هنوز محصولی اضافه نکرده‌اید.
-
       </div>
-
     `;
 
     return;
-
   }
 
   products.forEach(product => {
 
-    const row = document.createElement("div");
+    const row =
+      document.createElement("div");
 
-    row.className = "itemRow";
-
-    const currency =
-
-      product.currency === "USD"
-
-        ? "دالر"
-
-        : "افغانی";
-
-    const imageHTML = product.image
-
-      ? `
-
-        <img
-
-          src="${escapeHTML(product.image)}"
-
-          class="previewImage"
-
-          alt="محصول">
-
-      `
-
-      : "";
+    row.className =
+      "itemRow";
 
     row.innerHTML = `
 
-      ${imageHTML}
+      ${
+        product.image
+          ? `
+            <img
+              src="${escapeHTML(product.image)}"
+              class="previewImage"
+              alt="محصول">
+          `
+          : ""
+      }
 
       <h4>
-
-        ${escapeHTML(product.name || "")}
-
+        ${escapeHTML(product.name)}
       </h4>
 
       <p>
-
         قیمت:
-
-        ${escapeHTML(String(product.price ?? ""))}
-
-        ${currency}
-
+        ${escapeHTML(product.price)}
+        افغانی
       </p>
 
       <p>
-
-        ${escapeHTML(product.description || "")}
-
+        ${escapeHTML(
+          product.description || ""
+        )}
       </p>
 
       <button
-
         class="deleteBtn"
-
-        type="button">
+        onclick="
+          deleteProduct('${escapeHTML(product.id)}')
+        ">
 
         حذف محصول
 
@@ -5629,21 +6237,12 @@ function renderSellerProducts(products) {
 
     `;
 
-    row
-
-      .querySelector(".deleteBtn")
-
-      .addEventListener("click", () => {
-
-        deleteProduct(String(product.id));
-
-      });
-
     container.appendChild(row);
 
   });
 
 }
+
 
 /* =====================================================
    حذف محصول فروشنده
@@ -5671,6 +6270,7 @@ async function deleteProduct(productId) {
       "آیا از حذف این محصول مطمئن هستید؟"
     )
   ) {
+
     return;
   }
 
@@ -5706,7 +6306,9 @@ async function deleteProduct(productId) {
       "خطای حذف محصول:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -5800,9 +6402,15 @@ async function openAdminPanel() {
       "خطا در بررسی دسترسی مالک:\n\n" +
       error.message
     );
+
   }
+
 }
 
+
+/* =====================================================
+   پنل مدیریت اصلی
+===================================================== */
 
 async function renderAdminPanel() {
 
@@ -5824,6 +6432,37 @@ async function renderAdminPanel() {
     const products =
       await getProducts();
 
+    let visitorStats = null;
+    let storeVisitorStats = [];
+
+    try {
+
+      visitorStats =
+        await getVisitorStats();
+
+    } catch (error) {
+
+      console.error(
+        "VISITOR STATS ERROR:",
+        error
+      );
+
+    }
+
+    try {
+
+      storeVisitorStats =
+        await getAllStoreVisitorStats();
+
+    } catch (error) {
+
+      console.error(
+        "STORE VISITOR STATS ERROR:",
+        error
+      );
+
+    }
+
     const content =
       document.getElementById(
         "adminContent"
@@ -5832,6 +6471,38 @@ async function renderAdminPanel() {
     if (!content) {
       return;
     }
+
+    const totalVisitors =
+      getStatValue(
+        visitorStats,
+        [
+          "total",
+          "total_visits",
+          "total_visitors",
+          "all"
+        ]
+      );
+
+    const todayVisitors =
+      getStatValue(
+        visitorStats,
+        [
+          "today",
+          "today_visits",
+          "today_visitors"
+        ]
+      );
+
+    const monthVisitors =
+      getStatValue(
+        visitorStats,
+        [
+          "month",
+          "month_visits",
+          "month_visitors",
+          "this_month"
+        ]
+      );
 
     content.innerHTML = `
 
@@ -5876,23 +6547,132 @@ async function renderAdminPanel() {
       <div class="panelBox">
 
         <h3>
-          آمار سایت
+          📊 آمار سایت
         </h3>
 
         <span class="adminStat">
+
           کاربران:
           ${toFaDigits(users.length)}
+
         </span>
 
         <span class="adminStat">
+
           فروشگاه‌ها:
           ${toFaDigits(stores.length)}
+
         </span>
 
         <span class="adminStat">
+
           محصولات:
           ${toFaDigits(products.length)}
+
         </span>
+
+        <div
+          style="
+            margin-top:15px;
+            display:grid;
+            grid-template-columns:
+              repeat(auto-fit,minmax(150px,1fr));
+            gap:10px;
+          ">
+
+          <div
+            class="adminStat"
+            style="
+              display:block;
+              margin:0;
+            ">
+
+            👁️ بازدید کل
+
+            <strong
+              style="
+                display:block;
+                font-size:22px;
+                margin-top:5px;
+              ">
+
+              ${toFaDigits(totalVisitors)}
+
+            </strong>
+
+          </div>
+
+          <div
+            class="adminStat"
+            style="
+              display:block;
+              margin:0;
+            ">
+
+            📅 بازدید امروز
+
+            <strong
+              style="
+                display:block;
+                font-size:22px;
+                margin-top:5px;
+              ">
+
+              ${toFaDigits(todayVisitors)}
+
+            </strong>
+
+          </div>
+
+          <div
+            class="adminStat"
+            style="
+              display:block;
+              margin:0;
+            ">
+
+            📆 بازدید این ماه
+
+            <strong
+              style="
+                display:block;
+                font-size:22px;
+                margin-top:5px;
+              ">
+
+              ${toFaDigits(monthVisitors)}
+
+            </strong>
+
+          </div>
+
+        </div>
+
+        <p
+          style="
+            color:#777;
+            font-size:12px;
+            margin-top:10px;
+          ">
+
+          آمار بر اساس بازدیدهای ثبت‌شده در سامانه است.
+
+        </p>
+
+      </div>
+
+
+      <div class="panelBox">
+
+        <h3>
+          🔑 درخواست‌های فراموشی رمز
+        </h3>
+
+        <div id="adminPasswordRequests">
+
+          در حال دریافت درخواست‌ها...
+
+        </div>
 
       </div>
 
@@ -5904,6 +6684,17 @@ async function renderAdminPanel() {
         </h3>
 
         <div id="adminStores"></div>
+
+      </div>
+
+
+      <div class="panelBox">
+
+        <h3>
+          📊 آمار بازدید فروشگاه‌ها
+        </h3>
+
+        <div id="adminStoreVisitorStats"></div>
 
       </div>
 
@@ -5932,8 +6723,17 @@ async function renderAdminPanel() {
     `;
 
     renderAdminStores(stores);
+
     renderAdminProducts(products);
+
     renderAdminUsers(users);
+
+    renderAdminStoreVisitorStats(
+      stores,
+      storeVisitorStats
+    );
+
+    await renderAdminPasswordRequests();
 
   } catch (error) {
 
@@ -5946,7 +6746,87 @@ async function renderAdminPanel() {
       "خطای دریافت اطلاعات مدیریت:\n\n" +
       error.message
     );
+
   }
+
+}
+
+
+/* =====================================================
+   کمک برای خواندن آمار RPC
+===================================================== */
+
+function getStatValue(
+  data,
+  keys
+) {
+
+  if (
+    data === null ||
+    data === undefined
+  ) {
+    return 0;
+  }
+
+  let source = data;
+
+  if (
+    Array.isArray(data)
+  ) {
+
+    source =
+      data[0] || {};
+
+  }
+
+  if (
+    typeof source === "number"
+  ) {
+
+    return Number(source) || 0;
+
+  }
+
+  if (
+    typeof source === "string"
+  ) {
+
+    const n =
+      Number(source);
+
+    return Number.isFinite(n)
+      ? n
+      : 0;
+
+  }
+
+  if (
+    typeof source === "object"
+  ) {
+
+    for (
+      const key of keys
+    ) {
+
+      if (
+        source[key] !== undefined &&
+        source[key] !== null
+      ) {
+
+        const n =
+          Number(source[key]);
+
+        if (Number.isFinite(n)) {
+          return n;
+        }
+
+      }
+
+    }
+
+  }
+
+  return 0;
 }
 
 
@@ -6060,7 +6940,9 @@ async function changeOwnerPassword() {
       "تغییر رمز انجام نشد:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -6082,9 +6964,13 @@ function renderAdminStores(stores) {
   if (!stores.length) {
 
     container.innerHTML = `
+
       <div class="empty">
+
         هیچ فروشگاهی وجود ندارد.
+
       </div>
+
     `;
 
     return;
@@ -6100,23 +6986,94 @@ function renderAdminStores(stores) {
     row.className =
       "itemRow";
 
+    const blocked =
+      !!store.isBlocked;
+
     row.innerHTML = `
 
       <h4>
+
+        🏪
         ${escapeHTML(store.name)}
+
       </h4>
 
       <p>
+
         دسته:
+
         ${escapeHTML(
           getCategoryName(store.category)
         )}
+
       </p>
 
       <p>
+
         مالک فروشگاه:
+
         ${escapeHTML(store.ownerId)}
+
       </p>
+
+      <p>
+
+        وضعیت:
+
+        ${
+          blocked
+            ? `
+              <strong style="color:#b00020;">
+                🔴 مسدود
+              </strong>
+            `
+            : `
+              <strong style="color:green;">
+                🟢 فعال
+              </strong>
+            `
+        }
+
+      </p>
+
+      ${
+        blocked
+          ? `
+            <button
+              class="mainBtn"
+              type="button"
+              onclick="
+                adminSetStoreBlocked(
+                  '${escapeHTML(store.id)}',
+                  false
+                )
+              ">
+
+              🟢 فعال کردن فروشگاه
+
+            </button>
+          `
+          : `
+            <button
+              class="mainBtn"
+              type="button"
+              style="
+                background:#d88900;
+                color:#fff;
+                margin-left:5px;
+              "
+              onclick="
+                adminSetStoreBlocked(
+                  '${escapeHTML(store.id)}',
+                  true
+                )
+              ">
+
+              ⛔ مسدود کردن
+
+            </button>
+          `
+      }
 
       <button
         class="deleteBtn"
@@ -6124,16 +7081,96 @@ function renderAdminStores(stores) {
           adminDeleteStore('${escapeHTML(store.id)}')
         ">
 
-        حذف فروشگاه
+        🗑️ حذف فروشگاه
 
       </button>
 
     `;
 
     container.appendChild(row);
+
   });
+
 }
 
+
+/* =====================================================
+   مسدود / فعال کردن فروشگاه
+===================================================== */
+
+async function adminSetStoreBlocked(
+  storeId,
+  blocked
+) {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return;
+  }
+
+  const actionText =
+    blocked
+      ? "مسدود کردن"
+      : "فعال کردن";
+
+  if (
+    !confirm(
+      `آیا از ${actionText} این فروشگاه مطمئن هستید؟`
+    )
+  ) {
+
+    return;
+  }
+
+  try {
+
+    const token =
+      getOwnerToken();
+
+    await supabaseRpc(
+      "admin_set_store_blocked",
+      {
+        p_store_id:
+          Number(storeId),
+
+        p_blocked:
+          !!blocked,
+
+        p_token:
+          token
+      }
+    );
+
+    alert(
+      blocked
+        ? "فروشگاه مسدود شد."
+        : "فروشگاه دوباره فعال شد."
+    );
+
+    await renderAdminPanel();
+
+  } catch (error) {
+
+    console.error(
+      "ADMIN STORE BLOCK ERROR:",
+      error
+    );
+
+    alert(
+      `${actionText} فروشگاه انجام نشد:\n\n` +
+      error.message
+    );
+
+  }
+
+}
+
+
+/* =====================================================
+   حذف فروشگاه توسط مالک
+===================================================== */
 
 async function adminDeleteStore(storeId) {
 
@@ -6144,35 +7181,41 @@ async function adminDeleteStore(storeId) {
     return;
   }
 
+  const store =
+    await getStoreById(storeId);
+
+  if (!store) {
+
+    alert(
+      "فروشگاه پیدا نشد."
+    );
+
+    return;
+  }
+
   if (
     !confirm(
-      "با حذف فروشگاه، محصولات آن نیز حذف می‌شوند. ادامه می‌دهید؟"
+      "با حذف فروشگاه، محصولات و اطلاعات وابسته آن نیز حذف می‌شوند.\n\n" +
+      "آیا ادامه می‌دهید؟"
     )
   ) {
+
     return;
   }
 
   try {
 
-    await supabaseRequest(
-      "products",
+    const token =
+      getOwnerToken();
+
+    await supabaseRpc(
+      "admin_delete_store",
       {
-        method: "DELETE",
+        p_store_id:
+          Number(storeId),
 
-        query:
-          "?store_id=eq." +
-          encodeURIComponent(storeId)
-      }
-    );
-
-    await supabaseRequest(
-      "stores",
-      {
-        method: "DELETE",
-
-        query:
-          "?id=eq." +
-          encodeURIComponent(storeId)
+        p_token:
+          token
       }
     );
 
@@ -6180,8 +7223,13 @@ async function adminDeleteStore(storeId) {
       getCartStorageKey(storeId)
     );
 
+    localStorage.removeItem(
+      "anarKalaStoreVisit_" +
+      String(storeId)
+    );
+
     alert(
-      "فروشگاه حذف شد."
+      "فروشگاه با موفقیت حذف شد."
     );
 
     await renderAdminPanel();
@@ -6197,7 +7245,9 @@ async function adminDeleteStore(storeId) {
       "خطای حذف فروشگاه:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -6219,9 +7269,13 @@ function renderAdminProducts(products) {
   if (!products.length) {
 
     container.innerHTML = `
+
       <div class="empty">
+
         هیچ محصولی وجود ندارد.
+
       </div>
+
     `;
 
     return;
@@ -6240,18 +7294,26 @@ function renderAdminProducts(products) {
     row.innerHTML = `
 
       <h4>
+
         ${escapeHTML(product.name)}
+
       </h4>
 
       <p>
+
         قیمت:
+
         ${escapeHTML(product.price)}
         افغانی
+
       </p>
 
       <p>
+
         فروشگاه:
+
         ${escapeHTML(product.storeId)}
+
       </p>
 
       <button
@@ -6267,7 +7329,9 @@ function renderAdminProducts(products) {
     `;
 
     container.appendChild(row);
+
   });
+
 }
 
 
@@ -6285,6 +7349,7 @@ async function adminDeleteProduct(productId) {
       "آیا از حذف این محصول مطمئن هستید؟"
     )
   ) {
+
     return;
   }
 
@@ -6318,7 +7383,9 @@ async function adminDeleteProduct(productId) {
       "خطای حذف محصول:\n\n" +
       error.message
     );
+
   }
+
 }
 
 
@@ -6340,9 +7407,13 @@ function renderAdminUsers(users) {
   if (!users || !users.length) {
 
     container.innerHTML = `
+
       <div class="empty">
+
         هنوز کاربری ثبت‌نام نکرده است.
+
       </div>
+
     `;
 
     return;
@@ -6369,10 +7440,14 @@ function renderAdminUsers(users) {
           ? "مالک"
           : "خریدار";
 
+    const blocked =
+      isUserBlocked(user);
+
     const deleteButton =
       isOwnerAccount ||
       user.type === "admin"
         ? `
+
           <button
             class="deleteBtn"
             disabled>
@@ -6380,46 +7455,126 @@ function renderAdminUsers(users) {
             حساب مالک
 
           </button>
+
         `
         : `
+
           <button
             class="deleteBtn"
             onclick="
               adminDeleteUser('${escapeHTML(user.id)}')
             ">
 
-            حذف کاربر
+            🗑️ حذف کاربر
 
           </button>
+
         `;
+
+    const blockButton =
+      isOwnerAccount ||
+      user.type === "admin"
+        ? ""
+        : blocked
+          ? `
+
+            <button
+              class="mainBtn"
+              type="button"
+              onclick="
+                adminSetUserBlocked(
+                  '${escapeHTML(user.id)}',
+                  false
+                )
+              ">
+
+              🟢 فعال کردن حساب
+
+            </button>
+
+          `
+          : `
+
+            <button
+              class="mainBtn"
+              type="button"
+              style="
+                background:#d88900;
+                color:#fff;
+              "
+              onclick="
+                adminSetUserBlocked(
+                  '${escapeHTML(user.id)}',
+                  true
+                )
+              ">
+
+              ⛔ مسدود کردن حساب
+
+            </button>
+
+          `;
 
     row.innerHTML = `
 
       <h4>
+
         ${escapeHTML(user.name)}
+
       </h4>
 
       ${
         isOwnerAccount
           ? ""
           : `
+
             <p>
+
               شماره:
+
               ${escapeHTML(user.phone)}
+
             </p>
+
           `
       }
 
       <p>
+
         نوع حساب:
+
         ${typeText}
+
+      </p>
+
+      <p>
+
+        وضعیت:
+
+        ${
+          blocked
+            ? `
+              <strong style="color:#b00020;">
+                🔴 مسدود
+              </strong>
+            `
+            : `
+              <strong style="color:green;">
+                🟢 فعال
+              </strong>
+            `
+        }
+
       </p>
 
       ${
         user.created_at
           ? `
+
             <p>
+
               تاریخ ثبت:
+
               ${escapeHTML(
                 new Date(
                   user.created_at
@@ -6427,19 +7582,175 @@ function renderAdminUsers(users) {
                   "fa-AF"
                 )
               )}
+
+            </p>
+
+          `
+          : ""
+      }
+
+      ${
+        isOwnerAccount
+          ? `
+            <p style="
+              color:#777;
+              font-size:13px;
+            ">
+
+              🔐 حساب مالک اصلی سایت
+
             </p>
           `
           : ""
       }
 
-      ${deleteButton}
+      <div
+        style="
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
+          margin-top:10px;
+        ">
+
+        ${blockButton}
+
+        ${deleteButton}
+
+      </div>
 
     `;
 
     container.appendChild(row);
+
   });
+
 }
 
+
+/* =====================================================
+   مسدود / فعال کردن کاربر
+===================================================== */
+
+async function adminSetUserBlocked(
+  userId,
+  blocked
+) {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return;
+  }
+
+  const numericUserId =
+    Number(userId);
+
+  if (
+    !Number.isInteger(numericUserId) ||
+    numericUserId <= 0
+  ) {
+
+    alert(
+      "شناسه کاربر نامعتبر است."
+    );
+
+    return;
+  }
+
+  try {
+
+    const users =
+      await getUsers();
+
+    const targetUser =
+      users.find(
+        item =>
+          Number(item.id) ===
+          numericUserId
+      );
+
+    if (!targetUser) {
+
+      alert(
+        "کاربر پیدا نشد."
+      );
+
+      return;
+    }
+
+    if (
+      normalizePhone(targetUser.phone) ===
+      normalizePhone(OWNER.phone) ||
+      targetUser.type === "admin"
+    ) {
+
+      alert(
+        "حساب مالک قابل مسدود کردن نیست."
+      );
+
+      return;
+    }
+
+    const actionText =
+      blocked
+        ? "مسدود کردن"
+        : "فعال کردن";
+
+    if (
+      !confirm(
+        `آیا از ${actionText} این کاربر مطمئن هستید؟`
+      )
+    ) {
+
+      return;
+    }
+
+    const token =
+      getOwnerToken();
+
+    await supabaseRpc(
+      "admin_set_user_blocked",
+      {
+        p_user_id:
+          numericUserId,
+
+        p_blocked:
+          !!blocked,
+
+        p_token:
+          token
+      }
+    );
+
+    alert(
+      blocked
+        ? "کاربر مسدود شد."
+        : "کاربر دوباره فعال شد."
+    );
+
+    await renderAdminPanel();
+
+  } catch (error) {
+
+    console.error(
+      "ADMIN USER BLOCK ERROR:",
+      error
+    );
+
+    alert(
+      "تغییر وضعیت کاربر انجام نشد:\n\n" +
+      error.message
+    );
+
+  }
+
+}
+
+
+/* =====================================================
+   حذف کاربر
+===================================================== */
 
 async function adminDeleteUser(userId) {
 
@@ -6549,7 +7860,560 @@ async function adminDeleteUser(userId) {
       "خطای حذف کاربر:\n\n" +
       error.message
     );
+
   }
+
+}
+
+
+/* =====================================================
+   درخواست‌های فراموشی رمز برای مالک
+===================================================== */
+
+async function getPasswordResetRequests() {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return [];
+  }
+
+  const token =
+    getOwnerToken();
+
+  const result =
+    await supabaseRpc(
+      "admin_get_password_reset_requests",
+      {
+        p_token:
+          token
+      }
+    );
+
+  return Array.isArray(result)
+    ? result
+    : [];
+}
+
+
+async function renderAdminPasswordRequests() {
+
+  const container =
+    document.getElementById(
+      "adminPasswordRequests"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  try {
+
+    const requests =
+      await getPasswordResetRequests();
+
+    if (!requests.length) {
+
+      container.innerHTML = `
+
+        <div class="empty">
+
+          درخواست باز فعالی وجود ندارد.
+
+        </div>
+
+      `;
+
+      return;
+    }
+
+    container.innerHTML = "";
+
+    requests.forEach(request => {
+
+      const row =
+        document.createElement("div");
+
+      row.className =
+        "itemRow";
+
+      const requestId =
+        request.id;
+
+      const userId =
+        request.user_id ??
+        request.userid ??
+        request.userId ??
+        "";
+
+      const name =
+        request.name ||
+        request.user_name ||
+        request.username ||
+        "کاربر";
+
+      const phone =
+        request.phone ||
+        request.user_phone ||
+        "";
+
+      const type =
+        request.type ||
+        request.user_type ||
+        "buyer";
+
+      const status =
+        request.status ||
+        "pending";
+
+      const requestedAt =
+        request.requested_at ||
+        request.created_at ||
+        request.createdAt ||
+        "";
+
+      const typeText =
+        type === "seller"
+          ? "فروشنده"
+          : "خریدار";
+
+      row.innerHTML = `
+
+        <h4>
+
+          🔑 درخواست تغییر رمز
+
+        </h4>
+
+        <p>
+
+          نام:
+
+          <strong>
+            ${escapeHTML(name)}
+          </strong>
+
+        </p>
+
+        <p>
+
+          شماره:
+
+          ${escapeHTML(phone)}
+
+        </p>
+
+        <p>
+
+          نوع حساب:
+
+          ${escapeHTML(typeText)}
+
+        </p>
+
+        ${
+          requestedAt
+            ? `
+              <p>
+                زمان درخواست:
+                ${escapeHTML(
+                  new Date(
+                    requestedAt
+                  ).toLocaleString(
+                    "fa-AF"
+                  )
+                )}
+              </p>
+            `
+            : ""
+        }
+
+        <p>
+
+          وضعیت:
+
+          <strong>
+            ${escapeHTML(status)}
+          </strong>
+
+        </p>
+
+        <div
+          style="
+            margin-top:10px;
+          ">
+
+          <input
+            id="temporaryPassword_${escapeHTML(requestId)}"
+            type="password"
+            placeholder="رمز موقت جدید"
+            style="
+              width:100%;
+              margin-bottom:8px;
+            ">
+
+          <button
+            type="button"
+            class="mainBtn"
+            onclick="
+              adminSetTemporaryPassword(
+                '${escapeHTML(requestId)}',
+                '${escapeHTML(userId)}'
+              )
+            ">
+
+            🔐 تعیین رمز موقت
+
+          </button>
+
+        </div>
+
+      `;
+
+      container.appendChild(row);
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "PASSWORD REQUESTS ERROR:",
+      error
+    );
+
+    container.innerHTML = `
+
+      <div class="empty">
+
+        دریافت درخواست‌ها انجام نشد.
+
+        <br>
+
+        ${escapeHTML(error.message)}
+
+      </div>
+
+    `;
+
+  }
+
+}
+
+
+/* =====================================================
+   تعیین رمز موقت کاربر توسط مالک
+===================================================== */
+
+async function adminSetTemporaryPassword(
+  requestId,
+  userId
+) {
+
+  const access =
+    await requireOwnerAccess();
+
+  if (!access) {
+    return;
+  }
+
+  const input =
+    document.getElementById(
+      "temporaryPassword_" +
+      requestId
+    );
+
+  if (!input) {
+
+    alert(
+      "فیلد رمز موقت پیدا نشد."
+    );
+
+    return;
+  }
+
+  const temporaryPassword =
+    input.value;
+
+  if (
+    !temporaryPassword ||
+    temporaryPassword.length < 6
+  ) {
+
+    alert(
+      "رمز موقت باید حداقل ۶ کاراکتر باشد."
+    );
+
+    return;
+  }
+
+  if (
+    !confirm(
+      "آیا رمز موقت تعیین شود؟"
+    )
+  ) {
+
+    return;
+  }
+
+  try {
+
+    const token =
+      getOwnerToken();
+
+    await supabaseRpc(
+      "admin_set_temporary_password",
+      {
+        p_token:
+          token,
+
+        p_request_id:
+          Number(requestId),
+
+        p_temporary_password:
+          temporaryPassword
+      }
+    );
+
+    alert(
+      "رمز موقت با موفقیت تعیین شد.\n\n" +
+      "رمز را به کاربر اطلاع دهید."
+    );
+
+    await renderAdminPasswordRequests();
+
+  } catch (error) {
+
+    console.error(
+      "SET TEMP PASSWORD ERROR:",
+      error
+    );
+
+    alert(
+      "تعیین رمز موقت انجام نشد:\n\n" +
+      error.message
+    );
+
+  }
+
+}
+
+
+/* =====================================================
+   آمار بازدید فروشگاه‌ها در پنل مالک
+===================================================== */
+
+function findStoreStats(
+  stats,
+  storeId
+) {
+
+  if (!Array.isArray(stats)) {
+    return null;
+  }
+
+  return (
+    stats.find(item =>
+      String(
+        item.store_id ??
+        item.storeId ??
+        item.id ??
+        ""
+      ) ===
+      String(storeId)
+    ) ||
+    null
+  );
+}
+
+
+function renderAdminStoreVisitorStats(
+  stores,
+  stats
+) {
+
+  const container =
+    document.getElementById(
+      "adminStoreVisitorStats"
+    );
+
+  if (!container) {
+    return;
+  }
+
+  if (!stores.length) {
+
+    container.innerHTML = `
+
+      <div class="empty">
+
+        هنوز فروشگاهی وجود ندارد.
+
+      </div>
+
+    `;
+
+    return;
+  }
+
+  container.innerHTML = "";
+
+  stores.forEach(store => {
+
+    const stat =
+      findStoreStats(
+        stats,
+        store.id
+      );
+
+    const total =
+      getStatValue(
+        stat,
+        [
+          "total",
+          "total_visits",
+          "total_visitors"
+        ]
+      );
+
+    const today =
+      getStatValue(
+        stat,
+        [
+          "today",
+          "today_visits",
+          "today_visitors"
+        ]
+      );
+
+    const month =
+      getStatValue(
+        stat,
+        [
+          "month",
+          "month_visits",
+          "month_visitors",
+          "this_month"
+        ]
+      );
+
+    const row =
+      document.createElement("div");
+
+    row.className =
+      "itemRow";
+
+    row.innerHTML = `
+
+      <h4>
+
+        🏪
+        ${escapeHTML(store.name)}
+
+        ${
+          store.isBlocked
+            ? `
+              <span
+                style="
+                  color:#b00020;
+                  font-size:13px;
+                ">
+
+                (مسدود)
+
+              </span>
+            `
+            : ""
+        }
+
+      </h4>
+
+      <div
+        style="
+          display:grid;
+          grid-template-columns:
+            repeat(auto-fit,minmax(120px,1fr));
+          gap:8px;
+          margin-top:10px;
+        ">
+
+        <div
+          style="
+            background:#f5f5f5;
+            border-radius:10px;
+            padding:10px;
+            text-align:center;
+          ">
+
+          👁️ کل
+
+          <strong
+            style="
+              display:block;
+              font-size:20px;
+              margin-top:4px;
+            ">
+
+            ${toFaDigits(total)}
+
+          </strong>
+
+        </div>
+
+        <div
+          style="
+            background:#f5f5f5;
+            border-radius:10px;
+            padding:10px;
+            text-align:center;
+          ">
+
+          📅 امروز
+
+          <strong
+            style="
+              display:block;
+              font-size:20px;
+              margin-top:4px;
+            ">
+
+            ${toFaDigits(today)}
+
+          </strong>
+
+        </div>
+
+        <div
+          style="
+            background:#f5f5f5;
+            border-radius:10px;
+            padding:10px;
+            text-align:center;
+          ">
+
+          📆 این ماه
+
+          <strong
+            style="
+              display:block;
+              font-size:20px;
+              margin-top:4px;
+            ">
+
+            ${toFaDigits(month)}
+
+          </strong>
+
+        </div>
+
+      </div>
+
+    `;
+
+    container.appendChild(row);
+
+  });
+
 }
 
 
@@ -6576,6 +8440,7 @@ function getCategoryOptions(selected) {
           ${isSelected}>
 
           ${CATEGORIES[key][0]}
+
           ${escapeHTML(
             CATEGORIES[key][1]
           )}
@@ -6583,6 +8448,7 @@ function getCategoryOptions(selected) {
         </option>
 
       `;
+
     });
 
   return html;
@@ -6597,9 +8463,11 @@ function getCategoryName(category) {
   if (CATEGORIES[normalized]) {
 
     return CATEGORIES[normalized][1];
+
   }
 
   return "عمومی";
+
 }
 
 
@@ -6613,10 +8481,17 @@ document.addEventListener(
 
     updateGlobalCartButton();
 
+    /*
+       اگر فرم ورود در HTML وجود داشته باشد،
+       دکمه فراموشی رمز را اضافه می‌کنیم.
+    */
+
+    ensureForgotPasswordBox();
+
   }
 );
 
 
 /* =====================================================
-   پایان script.js
+   پایان app.js
 ===================================================== */
