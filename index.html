@@ -1,102 +1,69 @@
-
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <title>انار کالا</title>
-
   <meta name="theme-color" content="#b91c1c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="انار کالا">
-
   <link rel="stylesheet" href="./style.css">
-
   <link
     rel="apple-touch-icon"
     sizes="180x180"
-    href="./anar-icon.png.PNG?v=4">
-
+    href="./anar-icon.png.PNG">
   <link
     rel="icon"
     type="image/png"
-    href="./anar-icon.png.PNG?v=4">
-
+    href="./anar-icon.png.PNG">
   <link rel="manifest" href="./manifest.json">
-
 </head>
-
 <body>
-
 <header class="header">
-
-  <div class="logo" onclick="showHome()">
-    🍎 انار کالا
-  </div>
-
+  <div class="logo" onclick="showHome()">🍎 انار کالا</div>
   <nav>
     <button type="button" onclick="showHome()">🏠 خانه</button>
-
     <button
       type="button"
       id="buyerCartBtn"
       onclick="openAllCarts()">
       🛒 سبد سفارش
     </button>
-
     <button type="button" onclick="openAuth()">
       ورود / ثبت‌نام
     </button>
-
     <button type="button" onclick="openSellerPanel()">
       فروشنده
     </button>
-
     <button type="button" onclick="openAdminPanel()">
       ورود مالک
     </button>
   </nav>
-
 </header>
-
 <main>
-
   <!-- صفحه اصلی -->
-
   <section id="homePage" class="page">
-
     <div class="hero">
       <h1>به انار کالا خوش آمدید</h1>
-      <p>
-        دسته‌بندی مورد نظر خود را انتخاب کنید و فروشگاه‌های مرتبط را ببینید.
-      </p>
+      <p>دسته‌بندی مورد نظر خود را انتخاب کنید و فروشگاه‌های مرتبط را ببینید.</p>
     </div>
-
     <section class="categoriesSection">
-
       <div class="categoryHeader">
-
         <div>
           <h2>دسته‌بندی کالاها</h2>
           <div id="selectedCount" class="selectedCount">
             ۰ دسته انتخاب شده
           </div>
         </div>
-
         <button
           type="button"
           class="clearBtn"
           onclick="clearSelectedCategories()">
           پاک کردن انتخاب‌ها
         </button>
-
       </div>
-
       <div id="categoriesList" class="categoriesList"></div>
-
       <div class="categoryActions">
-
         <button
           type="button"
           id="showStoresBtn"
@@ -104,42 +71,26 @@
           onclick="showSelectedStores()">
           نمایش فروشگاه‌ها
         </button>
-
       </div>
-
     </section>
-
     <section class="storesSection">
-
       <div class="storesHeading">
-        <h2 id="storesTitle">
-          لطفاً یک دسته‌بندی انتخاب کنید
-        </h2>
+        <h2 id="storesTitle">لطفاً یک دسته‌بندی انتخاب کنید</h2>
       </div>
-
       <div id="storesList" class="stores"></div>
-
     </section>
-
   </section>
-
   <!-- صفحه فروشگاه -->
-
   <section id="storePage" class="page hidden">
-
     <button
       type="button"
       class="backBtn"
       onclick="showHome()">
       ← برگشت
     </button>
-
     <div id="storeHeader"></div>
-
     <div class="storeProductsHeader">
-
       <h2 class="sectionTitle">محصولات فروشگاه</h2>
-
       <button
         type="button"
         id="storeCartBtn"
@@ -147,189 +98,110 @@
         onclick="openCurrentStoreCart()">
         🛒 سبد سفارش
       </button>
-
     </div>
-
     <div id="productsList" class="products"></div>
-
   </section>
-
   <!-- سبد سفارش خریدار -->
-
   <section id="buyerCartPage" class="page hidden">
-
     <div class="panelHeader">
-
       <h2>🛒 سبد سفارش من</h2>
-
       <div class="panelActions">
-
-        <button type="button" onclick="showHome()">
-          خانه
-        </button>
-
-        <button type="button" onclick="openAllCarts()">
-          🔄 بروزرسانی
-        </button>
-
+        <button type="button" onclick="showHome()">خانه</button>
+        <button type="button" onclick="openAllCarts()">🔄 بروزرسانی</button>
       </div>
-
     </div>
-
     <div id="buyerCartContent">
       <p>سبد سفارش شما خالی است.</p>
     </div>
-
   </section>
-
   <!-- ورود و ثبت‌نام -->
-
   <section id="authPage" class="page hidden">
-
     <div class="authBox">
-
       <h2>ورود / ثبت‌نام</h2>
-
       <div class="authTabs">
-
-        <button type="button" onclick="showLogin()">
-          ورود
-        </button>
-
-        <button type="button" onclick="showRegister()">
-          ثبت‌نام
-        </button>
-
+        <button type="button" onclick="showLogin()">ورود</button>
+        <button type="button" onclick="showRegister()">ثبت‌نام</button>
       </div>
-
       <div id="loginBox">
-
         <input
           id="loginPhone"
           type="tel"
           placeholder="شماره تماس"
           autocomplete="tel">
-
         <input
           id="loginPassword"
           type="password"
           placeholder="رمز عبور"
           autocomplete="current-password">
-
         <button
           type="button"
           class="mainBtn"
           onclick="loginUser()">
           ورود
         </button>
-
       </div>
-
       <div id="registerBox" class="hidden">
-
         <input
           id="registerName"
           type="text"
           placeholder="نام شما"
           autocomplete="name">
-
         <input
           id="registerPhone"
           type="tel"
           placeholder="شماره تماس"
           autocomplete="tel">
-
         <input
           id="registerPassword"
           type="password"
           placeholder="رمز عبور"
           autocomplete="new-password">
-
         <select id="registerType">
           <option value="buyer">خریدار</option>
           <option value="seller">فروشنده</option>
         </select>
-
         <button
           type="button"
           class="mainBtn"
           onclick="registerUser()">
           ثبت‌نام
         </button>
-
       </div>
-
       <button
         type="button"
         class="closeBtn"
         onclick="showHome()">
         بستن
       </button>
-
     </div>
-
   </section>
-
   <!-- پنل فروشنده -->
-
   <section id="sellerPage" class="page hidden">
-
     <div class="panelHeader">
-
       <h2>پنل فروشنده</h2>
-
       <div class="panelActions">
-
-        <button type="button" onclick="showHome()">
-          خانه
-        </button>
-
-        <button type="button" onclick="logout()">
-          خروج
-        </button>
-
+        <button type="button" onclick="showHome()">خانه</button>
+        <button type="button" onclick="logout()">خروج</button>
       </div>
-
     </div>
-
     <div id="sellerContent"></div>
-
   </section>
-
   <!-- پنل مالک -->
-
   <section id="adminPage" class="page hidden">
-
     <div class="panelHeader">
-
       <h2>پنل مدیریت مالک</h2>
-
       <div class="panelActions">
-
-        <button type="button" onclick="showHome()">
-          خانه
-        </button>
-
-        <button type="button" onclick="logout()">
-          خروج مالک
-        </button>
-
+        <button type="button" onclick="showHome()">خانه</button>
+        <button type="button" onclick="logout()">خروج مالک</button>
       </div>
-
     </div>
-
     <div id="adminContent"></div>
-
   </section>
-
 </main>
-
 <footer>
   <p>© 2026 انار کالا</p>
 </footer>
-
-<script src="./script.js"></script>
-
+<!-- فایل جاوااسکریپت اصلی -->
+<script src="./app.js"></script>
 </body>
 </html>
-<script src="./script.js"></script>
